@@ -351,7 +351,9 @@ object SupabaseAuthHelper {
                     var accessToken: String? = null
                     try {
                         val json = JSONObject(body)
-                        accessToken = json.optString("access_token", null)
+                        if (json.has("access_token") && !json.isNull("access_token")) {
+                            accessToken = json.getString("access_token")
+                        }
                     } catch (_: Exception) {}
                     mainHandler.post {
                         callback(true, "Supabase OTP verified successfully!", accessToken)
