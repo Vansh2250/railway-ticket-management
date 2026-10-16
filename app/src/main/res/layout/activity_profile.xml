@@ -152,17 +152,6 @@
                         app:strokeColor="@color/accent_red"
                         app:strokeWidth="1.5dp" />
 
-                    <!-- Supabase Settings Button -->
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnProfileSupabase"
-                        style="@style/Widget.MaterialComponents.Button.TextButton"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="⚙️ Supabase Email OTP Settings"
-                        android:textAllCaps="false"
-                        android:textColor="@color/primary"
-                        android:textSize="13sp" />
 
                 </LinearLayout>
             </androidx.cardview.widget.CardView>

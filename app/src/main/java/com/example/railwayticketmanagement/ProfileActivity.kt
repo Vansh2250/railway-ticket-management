@@ -23,7 +23,6 @@ class ProfileActivity : AppCompatActivity() {
     private lateinit var etProfilePassword: TextInputEditText
     private lateinit var btnUpdateProfile: MaterialButton
     private lateinit var btnProfileLogout: MaterialButton
-    private lateinit var btnProfileSupabase: MaterialButton
     private lateinit var btnHeaderBack: ImageButton
 
     private var currentUser: User? = null
@@ -63,7 +62,6 @@ class ProfileActivity : AppCompatActivity() {
         etProfilePassword = findViewById(R.id.etProfilePassword)
         btnUpdateProfile = findViewById(R.id.btnUpdateProfile)
         btnProfileLogout = findViewById(R.id.btnProfileLogout)
-        btnProfileSupabase = findViewById(R.id.btnProfileSupabase)
     }
 
     private fun loadUserProfile() {
@@ -94,10 +92,6 @@ class ProfileActivity : AppCompatActivity() {
 
         btnProfileLogout.setOnClickListener {
             showLogoutConfirmationDialog()
-        }
-
-        btnProfileSupabase.setOnClickListener {
-            com.example.railwayticketmanagement.utils.SupabaseAuthHelper.showConfigDialog(this)
         }
     }
 

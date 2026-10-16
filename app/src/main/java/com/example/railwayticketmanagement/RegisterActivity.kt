@@ -1,6 +1,5 @@
 package com.example.railwayticketmanagement
 
-import android.app.ProgressDialog
 import android.content.Intent
 import android.os.Bundle
 import android.util.Patterns
@@ -13,9 +12,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.railwayticketmanagement.models.User
+import com.example.railwayticketmanagement.utils.DummyOtpHelper
 import com.example.railwayticketmanagement.utils.InsetsUtil
 import com.example.railwayticketmanagement.utils.SessionManager
-import com.example.railwayticketmanagement.utils.SupabaseAuthHelper
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 
@@ -32,7 +31,6 @@ class RegisterActivity : AppCompatActivity() {
     private lateinit var btnRegister: MaterialButton
     private lateinit var tvGoToLogin: TextView
     private lateinit var btnHeaderBack: ImageButton
-    private lateinit var btnConfigureSupabase: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -46,7 +44,6 @@ class RegisterActivity : AppCompatActivity() {
 
         initViews()
         setupListeners()
-        updateSupabaseBadge()
     }
 
     private fun initViews() {
@@ -55,8 +52,6 @@ class RegisterActivity : AppCompatActivity() {
 
         val tvTitle: TextView = findViewById(R.id.tvHeaderTitle)
         tvTitle.text = "User Registration"
-
-        btnConfigureSupabase = findViewById(R.id.btnConfigureSupabase)
 
         etRegName = findViewById(R.id.etRegName)
         etRegEmail = findViewById(R.id.etRegEmail)
@@ -67,24 +62,8 @@ class RegisterActivity : AppCompatActivity() {
         tvGoToLogin = findViewById(R.id.tvGoToLogin)
     }
 
-    private fun updateSupabaseBadge() {
-        if (SupabaseAuthHelper.isConfigured(this)) {
-            btnConfigureSupabase.text = "🟢 Supabase Connected (Tap to change keys)"
-            btnConfigureSupabase.setTextColor(resources.getColor(R.color.accent_green, theme))
-        } else {
-            btnConfigureSupabase.text = "⚙️ Configure Supabase API Keys"
-            btnConfigureSupabase.setTextColor(resources.getColor(R.color.primary, theme))
-        }
-    }
-
     private fun setupListeners() {
         btnHeaderBack.setOnClickListener { finish() }
-
-        btnConfigureSupabase.setOnClickListener {
-            SupabaseAuthHelper.showConfigDialog(this) {
-                updateSupabaseBadge()
-            }
-        }
 
         btnRegister.setOnClickListener {
             handleRegister()
@@ -157,14 +136,14 @@ class RegisterActivity : AppCompatActivity() {
             return
         }
 
-        // Show choice: Verify with Supabase OTP or Direct Register
+        // Show choice: Verify via OTP or Direct Register
         AlertDialog.Builder(this)
-            .setTitle("Confirm Email Verification")
-            .setMessage("Would you like to verify your email ($email) via Supabase 6-digit OTP code?")
+            .setTitle("Email Verification")
+            .setMessage("Would you like to verify your email ($email) via 6-digit OTP?")
             .setPositiveButton("Verify via OTP 📨") { _, _ ->
                 sendRegistrationOtp(name, email, mobile, password)
             }
-            .setNeutralButton("Direct Register (Demo)") { _, _ ->
+            .setNeutralButton("Direct Register") { _, _ ->
                 executeRegistration(name, email, mobile, password)
             }
             .setNegativeButton("Cancel", null)
@@ -172,38 +151,7 @@ class RegisterActivity : AppCompatActivity() {
     }
 
     private fun sendRegistrationOtp(name: String, email: String, mobile: String, password: String) {
-        val progress = ProgressDialog(this).apply {
-            setMessage("Sending verification code via Supabase...")
-            setCancelable(false)
-            show()
-        }
-
-        SupabaseAuthHelper.sendOtp(this, email, false) { success, message, _ ->
-            progress.dismiss()
-
-            if (success) {
-                showOtpVerificationDialog(name, email, mobile, password)
-            } else {
-                if (!SupabaseAuthHelper.isConfigured(this)) {
-                    AlertDialog.Builder(this)
-                        .setTitle("Supabase Credentials Required ⚙️")
-                        .setMessage("To send real OTP emails from your Supabase project account to your Gmail, please configure your Supabase Project URL and Anon Key.")
-                        .setPositiveButton("Configure Now") { _, _ ->
-                            SupabaseAuthHelper.showConfigDialog(this) {
-                                updateSupabaseBadge()
-                            }
-                        }
-                        .setNegativeButton("Cancel", null)
-                        .show()
-                } else {
-                    AlertDialog.Builder(this)
-                        .setTitle("Supabase Notice")
-                        .setMessage(message)
-                        .setPositiveButton("OK", null)
-                        .show()
-                }
-            }
-        }
+        showOtpVerificationDialog(name, email, mobile, password)
     }
 
     private fun showOtpVerificationDialog(
@@ -212,15 +160,25 @@ class RegisterActivity : AppCompatActivity() {
         mobile: String,
         password: String
     ) {
-        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_supabase_otp_verify, null)
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_otp_verify, null)
         val tvNotice = dialogView.findViewById<TextView>(R.id.tvOtpDialogNotice)
         val etOtp = dialogView.findViewById<EditText>(R.id.etOtpDialogCode)
-        val btnOpenMail = dialogView.findViewById<MaterialButton>(R.id.btnOtpDialogOpenMail)
+        val btnAutoFill = dialogView.findViewById<MaterialButton>(R.id.btnOtpDialogAutoFill)
 
-        tvNotice.text = "A 6-digit verification code has been dispatched from your Supabase server to:\n$email\n\nPlease check your Gmail app and enter the 6-digit code below:"
+        tvNotice.text = "A 6-digit OTP verification code has been dispatched for $email. Please enter it below:"
 
-        btnOpenMail.setOnClickListener {
-            SupabaseAuthHelper.openEmailApp(this)
+        var generatedCode = ""
+        DummyOtpHelper.sendOtp(this, email, onAutoFill = { code ->
+            etOtp.setText(code)
+        }) { _, _, code ->
+            generatedCode = code
+            etOtp.setText(code)
+        }
+
+        btnAutoFill.setOnClickListener {
+            val codeToUse = if (generatedCode.isNotEmpty()) generatedCode else DummyOtpHelper.getLastGeneratedOtp(email) ?: "123456"
+            etOtp.setText(codeToUse)
+            Toast.makeText(this, "OTP $codeToUse auto-filled!", Toast.LENGTH_SHORT).show()
         }
 
         val dialog = AlertDialog.Builder(this)
@@ -240,14 +198,7 @@ class RegisterActivity : AppCompatActivity() {
                     return@setOnClickListener
                 }
 
-                val verifyProgress = ProgressDialog(this).apply {
-                    setMessage("Verifying code with Supabase...")
-                    setCancelable(false)
-                    show()
-                }
-
-                SupabaseAuthHelper.verifyOtp(this, email, enteredOtp) { verified, verifyMsg, _ ->
-                    verifyProgress.dismiss()
+                DummyOtpHelper.verifyOtp(email, enteredOtp) { verified, verifyMsg ->
                     if (verified) {
                         dialog.dismiss()
                         Toast.makeText(this, "Email Verified Successfully!", Toast.LENGTH_SHORT).show()

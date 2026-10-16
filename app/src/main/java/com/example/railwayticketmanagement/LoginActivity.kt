@@ -14,9 +14,9 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.railwayticketmanagement.models.User
+import com.example.railwayticketmanagement.utils.DummyOtpHelper
 import com.example.railwayticketmanagement.utils.InsetsUtil
 import com.example.railwayticketmanagement.utils.SessionManager
-import com.example.railwayticketmanagement.utils.SupabaseAuthHelper
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 
@@ -26,7 +26,6 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var session: SessionManager
 
     private lateinit var btnHeaderBack: ImageButton
-    private lateinit var btnConfigureSupabase: TextView
 
     // Mode Switcher Tabs
     private lateinit var tabPasswordLogin: Button
@@ -48,7 +47,7 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var btnSendOtpLogin: MaterialButton
     private lateinit var tvOtpSentNotice: TextView
     private lateinit var etLoginOtpCode: TextInputEditText
-    private lateinit var btnOpenMailAppLogin: MaterialButton
+    private lateinit var btnAutoFillOtpCode: MaterialButton
     private lateinit var btnVerifyOtpLogin: MaterialButton
     private lateinit var tvResendOtpLogin: TextView
     private lateinit var btnChangeOtpEmail: TextView
@@ -71,7 +70,6 @@ class LoginActivity : AppCompatActivity() {
 
         initViews()
         setupListeners()
-        updateSupabaseBadge()
 
         val prefillEmail = intent.getStringExtra("PREFILL_EMAIL")
         if (!prefillEmail.isNullOrBlank()) {
@@ -93,8 +91,6 @@ class LoginActivity : AppCompatActivity() {
         val tvTitle: TextView = findViewById(R.id.tvHeaderTitle)
         tvTitle.text = "Account Login"
 
-        btnConfigureSupabase = findViewById(R.id.btnConfigureSupabase)
-
         tabPasswordLogin = findViewById(R.id.tabPasswordLogin)
         tabOtpLogin = findViewById(R.id.tabOtpLogin)
         layoutPasswordLogin = findViewById(R.id.layoutPasswordLogin)
@@ -114,7 +110,7 @@ class LoginActivity : AppCompatActivity() {
         btnSendOtpLogin = findViewById(R.id.btnSendOtpLogin)
         tvOtpSentNotice = findViewById(R.id.tvOtpSentNotice)
         etLoginOtpCode = findViewById(R.id.etLoginOtpCode)
-        btnOpenMailAppLogin = findViewById(R.id.btnOpenMailAppLogin)
+        btnAutoFillOtpCode = findViewById(R.id.btnAutoFillOtpCode)
         btnVerifyOtpLogin = findViewById(R.id.btnVerifyOtpLogin)
         tvResendOtpLogin = findViewById(R.id.tvResendOtpLogin)
         btnChangeOtpEmail = findViewById(R.id.btnChangeOtpEmail)
@@ -122,24 +118,8 @@ class LoginActivity : AppCompatActivity() {
         tvGoToRegister = findViewById(R.id.tvGoToRegister)
     }
 
-    private fun updateSupabaseBadge() {
-        if (SupabaseAuthHelper.isConfigured(this)) {
-            btnConfigureSupabase.text = "🟢 Supabase Connected (Tap to change keys)"
-            btnConfigureSupabase.setTextColor(resources.getColor(R.color.accent_green, theme))
-        } else {
-            btnConfigureSupabase.text = "⚙️ Configure Supabase API Keys"
-            btnConfigureSupabase.setTextColor(resources.getColor(R.color.primary, theme))
-        }
-    }
-
     private fun setupListeners() {
         btnHeaderBack.setOnClickListener { finish() }
-
-        btnConfigureSupabase.setOnClickListener {
-            SupabaseAuthHelper.showConfigDialog(this) {
-                updateSupabaseBadge()
-            }
-        }
 
         tabPasswordLogin.setOnClickListener { switchToPasswordMode() }
         tabOtpLogin.setOnClickListener { switchToOtpMode() }
@@ -161,8 +141,10 @@ class LoginActivity : AppCompatActivity() {
 
         btnSendOtpLogin.setOnClickListener { handleSendOtp() }
 
-        btnOpenMailAppLogin.setOnClickListener {
-            SupabaseAuthHelper.openEmailApp(this)
+        btnAutoFillOtpCode.setOnClickListener {
+            val code = DummyOtpHelper.getLastGeneratedOtp(pendingOtpEmail) ?: "123456"
+            etLoginOtpCode.setText(code)
+            Toast.makeText(this, "OTP $code Auto-Filled!", Toast.LENGTH_SHORT).show()
         }
 
         btnVerifyOtpLogin.setOnClickListener { handleVerifyOtp() }
@@ -260,52 +242,17 @@ class LoginActivity : AppCompatActivity() {
 
         pendingOtpEmail = email
 
-        val progress = ProgressDialog(this).apply {
-            setMessage("Sending OTP from Supabase...")
-            setCancelable(false)
-            show()
-        }
-
-        btnSendOtpLogin.isEnabled = false
-
-        SupabaseAuthHelper.sendOtp(this, email, false) { success, message, _ ->
-            progress.dismiss()
-            btnSendOtpLogin.isEnabled = true
-
+        DummyOtpHelper.sendOtp(this, email, onAutoFill = { code ->
+            etLoginOtpCode.setText(code)
+        }) { success, message, generatedOtp ->
             if (success) {
                 layoutOtpStepEmail.visibility = View.GONE
                 layoutOtpStepVerify.visibility = View.VISIBLE
                 tvOtpSentNotice.text = "Enter 6-digit OTP code sent to: $email"
-
-                AlertDialog.Builder(this)
-                    .setTitle("Check Your Gmail App 📨")
-                    .setMessage("A 6-digit verification code has been dispatched from your Supabase server to $email.\n\nPlease open your Gmail app (and check the Spam/Junk folder if needed) to copy the code.")
-                    .setPositiveButton("Open Gmail App") { _, _ ->
-                        SupabaseAuthHelper.openEmailApp(this)
-                    }
-                    .setNegativeButton("OK", null)
-                    .show()
-
+                etLoginOtpCode.setText(generatedOtp)
                 startResendTimer()
             } else {
-                if (!SupabaseAuthHelper.isConfigured(this)) {
-                    AlertDialog.Builder(this)
-                        .setTitle("Supabase Credentials Required ⚙️")
-                        .setMessage("To send real OTP emails from your Supabase project account to your Gmail, please configure your Supabase Project URL and Anon Key.")
-                        .setPositiveButton("Configure Now") { _, _ ->
-                            SupabaseAuthHelper.showConfigDialog(this) {
-                                updateSupabaseBadge()
-                            }
-                        }
-                        .setNegativeButton("Cancel", null)
-                        .show()
-                } else {
-                    AlertDialog.Builder(this)
-                        .setTitle("Supabase Notice")
-                        .setMessage(message)
-                        .setPositiveButton("OK", null)
-                        .show()
-                }
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -318,18 +265,7 @@ class LoginActivity : AppCompatActivity() {
             return
         }
 
-        val progress = ProgressDialog(this).apply {
-            setMessage("Verifying OTP with Supabase...")
-            setCancelable(false)
-            show()
-        }
-
-        btnVerifyOtpLogin.isEnabled = false
-
-        SupabaseAuthHelper.verifyOtp(this, pendingOtpEmail, otpCode) { success, message, _ ->
-            progress.dismiss()
-            btnVerifyOtpLogin.isEnabled = true
-
+        DummyOtpHelper.verifyOtp(pendingOtpEmail, otpCode) { success, message ->
             if (success) {
                 resendTimer?.cancel()
                 Toast.makeText(this, "OTP Verified Successfully!", Toast.LENGTH_SHORT).show()

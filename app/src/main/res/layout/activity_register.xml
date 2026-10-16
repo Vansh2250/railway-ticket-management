@@ -22,22 +22,6 @@
             android:orientation="vertical"
             android:padding="20dp">
 
-            <!-- Supabase Config Status Badge -->
-            <TextView
-                android:id="@+id/btnConfigureSupabase"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="@drawable/bg_fare_container"
-                android:clickable="true"
-                android:focusable="true"
-                android:paddingStart="12dp"
-                android:paddingTop="6dp"
-                android:paddingEnd="12dp"
-                android:paddingBottom="6dp"
-                android:text="⚡ Supabase Server OTP Config"
-                android:textColor="@color/primary"
-                android:textSize="12sp"
-                android:textStyle="bold" />
 
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"

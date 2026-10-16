@@ -4,15 +4,14 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.view.View
-import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.example.railwayticketmanagement.utils.DummyOtpHelper
 import com.example.railwayticketmanagement.utils.InsetsUtil
-import com.example.railwayticketmanagement.utils.SupabaseAuthHelper
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 
@@ -22,7 +21,6 @@ class ForgotPasswordActivity : AppCompatActivity() {
 
     private var headerView: View? = null
     private lateinit var btnHeaderBack: ImageButton
-    private lateinit var btnConfigureSupabase: TextView
 
     // Steps containers
     private lateinit var layoutStepEmail: LinearLayout
@@ -36,7 +34,7 @@ class ForgotPasswordActivity : AppCompatActivity() {
     // Step 2: OTP
     private lateinit var tvOtpInstruction: TextView
     private lateinit var etForgotOtp: TextInputEditText
-    private lateinit var btnOpenMailApp: MaterialButton
+    private lateinit var btnAutoFillOtpForgot: MaterialButton
     private lateinit var btnVerifyOtp: MaterialButton
     private lateinit var tvResendOtp: TextView
 
@@ -48,7 +46,6 @@ class ForgotPasswordActivity : AppCompatActivity() {
     private lateinit var tvBackToLogin: TextView
 
     private var targetEmail: String = ""
-    private var supabaseAccessToken: String? = null
     private var resendTimer: CountDownTimer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -81,7 +78,7 @@ class ForgotPasswordActivity : AppCompatActivity() {
 
         tvOtpInstruction = findViewById(R.id.tvOtpInstruction)
         etForgotOtp = findViewById(R.id.etForgotOtp)
-        btnOpenMailApp = findViewById(R.id.btnOpenMailApp)
+        btnAutoFillOtpForgot = findViewById(R.id.btnAutoFillOtpForgot)
         btnVerifyOtp = findViewById(R.id.btnVerifyOtp)
         tvResendOtp = findViewById(R.id.tvResendOtp)
 
@@ -89,39 +86,18 @@ class ForgotPasswordActivity : AppCompatActivity() {
         etConfirmNewPassword = findViewById(R.id.etConfirmNewPassword)
         btnResetPassword = findViewById(R.id.btnResetPassword)
 
-        btnConfigureSupabase = findViewById(R.id.btnConfigureSupabase)
-        updateSupabaseButtonBadge()
-
         tvBackToLogin = findViewById(R.id.tvBackToLogin)
     }
 
-    private fun updateSupabaseButtonBadge() {
-        if (SupabaseAuthHelper.isConfigured(this)) {
-            btnConfigureSupabase.text = "🟢 Supabase Connected (Tap to change keys)"
-            btnConfigureSupabase.setTextColor(resources.getColor(R.color.accent_green, theme))
-        } else {
-            btnConfigureSupabase.text = "⚙️ Configure Supabase API Keys (For real email OTP)"
-            btnConfigureSupabase.setTextColor(resources.getColor(R.color.primary, theme))
-        }
-    }
-
-    private fun showSupabaseConfigDialog() {
-        SupabaseAuthHelper.showConfigDialog(this) {
-            updateSupabaseButtonBadge()
-        }
-    }
-
     private fun setupListeners() {
-        btnOpenMailApp.setOnClickListener {
-            SupabaseAuthHelper.openEmailApp(this)
-        }
-
-        btnConfigureSupabase.setOnClickListener {
-            showSupabaseConfigDialog()
-        }
-
         btnSendOtp.setOnClickListener {
             handleSendOtp()
+        }
+
+        btnAutoFillOtpForgot.setOnClickListener {
+            val code = DummyOtpHelper.getLastGeneratedOtp(targetEmail) ?: "123456"
+            etForgotOtp.setText(code)
+            Toast.makeText(this, "OTP $code Auto-Filled!", Toast.LENGTH_SHORT).show()
         }
 
         btnVerifyOtp.setOnClickListener {
@@ -168,46 +144,20 @@ class ForgotPasswordActivity : AppCompatActivity() {
         }
 
         targetEmail = email
-        btnSendOtp.isEnabled = false
-        btnSendOtp.text = "Sending OTP..."
 
-        SupabaseAuthHelper.sendOtp(this, email) { success, message, generatedOtp ->
-            btnSendOtp.isEnabled = true
-            btnSendOtp.text = "Send Supabase OTP"
-
+        DummyOtpHelper.sendOtp(this, email, onAutoFill = { code ->
+            etForgotOtp.setText(code)
+        }) { success, message, generatedOtp ->
             if (success) {
                 layoutStepEmail.visibility = View.GONE
                 layoutStepOtp.visibility = View.VISIBLE
                 layoutStepNewPassword.visibility = View.GONE
 
-                tvOtpInstruction.text = "Enter the 6-digit OTP sent to:\n$email"
+                tvOtpInstruction.text = "Enter the 6-digit OTP code sent for:\n$email"
+                etForgotOtp.setText(generatedOtp)
                 startResendTimer()
-
-                AlertDialog.Builder(this)
-                    .setTitle("Check Your Gmail App 📨")
-                    .setMessage("A 6-digit verification code has been dispatched from your Supabase server to $email.\n\nPlease open your Gmail app (and check the Spam/Junk folder if needed) to copy the code.")
-                    .setPositiveButton("Open Gmail App") { _, _ ->
-                        SupabaseAuthHelper.openEmailApp(this)
-                    }
-                    .setNegativeButton("OK", null)
-                    .show()
             } else {
-                if (!SupabaseAuthHelper.isConfigured(this)) {
-                    AlertDialog.Builder(this)
-                        .setTitle("Supabase Credentials Required ⚙️")
-                        .setMessage("To send real OTP emails from your Supabase project account to your Gmail, please configure your Supabase Project URL and Anon Key.")
-                        .setPositiveButton("Configure Now") { _, _ ->
-                            showSupabaseConfigDialog()
-                        }
-                        .setNegativeButton("Cancel", null)
-                        .show()
-                } else {
-                    AlertDialog.Builder(this)
-                        .setTitle("Supabase Notice")
-                        .setMessage(message)
-                        .setPositiveButton("OK", null)
-                        .show()
-                }
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -221,20 +171,11 @@ class ForgotPasswordActivity : AppCompatActivity() {
             return
         }
 
-        btnVerifyOtp.isEnabled = false
-        btnVerifyOtp.text = "Verifying..."
-
-        SupabaseAuthHelper.verifyOtp(this, targetEmail, otp) { success, message, accessToken ->
-            btnVerifyOtp.isEnabled = true
-            btnVerifyOtp.text = "Verify OTP Code"
-
+        DummyOtpHelper.verifyOtp(targetEmail, otp) { success, message ->
             if (success) {
                 resendTimer?.cancel()
-                supabaseAccessToken = accessToken
-
                 layoutStepOtp.visibility = View.GONE
                 layoutStepNewPassword.visibility = View.VISIBLE
-
                 Toast.makeText(this, "OTP Verified Successfully!", Toast.LENGTH_SHORT).show()
             } else {
                 AlertDialog.Builder(this)
@@ -247,21 +188,13 @@ class ForgotPasswordActivity : AppCompatActivity() {
     }
 
     private fun handleResendOtp() {
-        SupabaseAuthHelper.sendOtp(this, targetEmail) { success, message, generatedOtp ->
+        DummyOtpHelper.sendOtp(this, targetEmail, onAutoFill = { code ->
+            etForgotOtp.setText(code)
+        }) { success, message, generatedOtp ->
             if (success) {
+                etForgotOtp.setText(generatedOtp)
                 startResendTimer()
-                if (generatedOtp != null) {
-                    AlertDialog.Builder(this)
-                        .setTitle("New Supabase OTP")
-                        .setMessage("Your new 6-digit Verification Code is:\n\n👉  $generatedOtp  👈")
-                        .setPositiveButton("Auto-fill") { _, _ ->
-                            etForgotOtp.setText(generatedOtp)
-                        }
-                        .setNegativeButton("OK", null)
-                        .show()
-                } else {
-                    Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
-                }
+                Toast.makeText(this, "New OTP sent!", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
             }
@@ -300,10 +233,7 @@ class ForgotPasswordActivity : AppCompatActivity() {
         val updatedLocal = dbHelper.updatePasswordByEmail(targetEmail, newPassword)
 
         if (updatedLocal) {
-            // 2. Synchronize with Supabase Auth
-            SupabaseAuthHelper.updatePasswordOnSupabase(supabaseAccessToken, newPassword) { _, _ -> }
-
-            // 3. Show Password Reset Confirmation Dialog
+            // 2. Show Password Reset Confirmation Dialog
             AlertDialog.Builder(this)
                 .setTitle("Password Reset Confirmed! ✅")
                 .setMessage("Your account password for $targetEmail has been successfully changed.\n\nYou can now log in using your new password.")
