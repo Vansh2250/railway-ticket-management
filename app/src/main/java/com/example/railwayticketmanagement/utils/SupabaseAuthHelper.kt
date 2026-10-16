@@ -47,9 +47,9 @@ object SupabaseAuthHelper {
     private const val KEY_URL = "supabase_project_url"
     private const val KEY_ANON_KEY = "supabase_anon_key"
 
-    // Default constants - paste your project credentials here or configure inside the app
-    var DEFAULT_SUPABASE_URL = "https://xyzcompany.supabase.co"
-    var DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.dummy_anon_key"
+    // Default project credentials from user's live Supabase account
+    var DEFAULT_SUPABASE_URL = "https://hkxjiymnngqzfhvinnqq.supabase.co"
+    var DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhreGppeW1ubmdxemZodmlubnFxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxMzk2MTAsImV4cCI6MjEwNzcxNTYxMH0.XO0BZ_DoLDEPlvHTurTEfere35TlnEszrz02g84dBt4"
 
     private var cachedUrl: String? = null
     private var cachedAnonKey: String? = null
@@ -271,7 +271,14 @@ object SupabaseAuthHelper {
         callback: (success: Boolean, message: String, accessToken: String?) -> Unit
     ) {
         val cleanEmail = email.trim().lowercase()
-        val cleanOtp = otp.trim()
+        var cleanOtp = otp.trim()
+
+        // If user pasted confirmation link or URL from email, auto-extract token or token_hash
+        if (cleanOtp.contains("token=")) {
+            cleanOtp = cleanOtp.substringAfter("token=").substringBefore("&")
+        } else if (cleanOtp.contains("token_hash=")) {
+            cleanOtp = cleanOtp.substringAfter("token_hash=").substringBefore("&")
+        }
 
         // 1. Check local demo OTP first
         val cached = localOtpMap[cleanEmail]
@@ -297,8 +304,8 @@ object SupabaseAuthHelper {
         val baseUrl = getSupabaseUrl(context).trimEnd('/')
         val anonKey = getSupabaseAnonKey(context)
 
-        // Try sequentially: "email" -> "magiclink" -> "recovery" -> "signup"
-        verifyWithTypes(baseUrl, anonKey, cleanEmail, cleanOtp, listOf("email", "magiclink", "recovery", "signup"), 0, callback)
+        // Try sequentially: "email" -> "signup" -> "magiclink" -> "recovery"
+        verifyWithTypes(baseUrl, anonKey, cleanEmail, cleanOtp, listOf("email", "signup", "magiclink", "recovery"), 0, callback)
     }
 
     private fun verifyWithTypes(
@@ -357,6 +364,12 @@ object SupabaseAuthHelper {
                     } catch (_: Exception) {}
                     mainHandler.post {
                         callback(true, "Supabase OTP verified successfully!", accessToken)
+                    }
+                } else if (body.contains("already confirmed", ignoreCase = true) ||
+                           body.contains("user_already_confirmed", ignoreCase = true) ||
+                           body.contains("already verified", ignoreCase = true)) {
+                    mainHandler.post {
+                        callback(true, "Email verified successfully via confirmation link!", null)
                     }
                 } else {
                     // Try next verification type
